@@ -169,7 +169,7 @@ const RefreshAccessToken = asyncHandler(async (req, res) => {
       throw new ApiError(401, "User not found");
     }
 
-    if (IncomingRefreshToken !== user.RefreshAccessToken) {
+    if (IncomingRefreshToken !== user.refreshToken) {
       throw new ApiError(401, "Refresh token does not match");
     }
 
@@ -201,4 +201,28 @@ const RefreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser, loginUSer, LogoutUser, RefreshAccessToken };
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+
+  const user = await User.findById(req.user?._id);
+  const isPasswordCoorect = user.isPasswordValid(oldPassword);
+
+  if (!isPasswordCoorect) {
+    throw new ApiError(401, "Old password is incorrect");
+  }
+
+  user.password = newPassword;
+  await user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Password changed successfully", {}));
+});
+
+export {
+  registerUser,
+  loginUSer,
+  LogoutUser,
+  RefreshAccessToken,
+  changeCurrentPassword,
+};
