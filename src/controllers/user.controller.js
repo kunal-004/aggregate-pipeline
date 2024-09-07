@@ -219,10 +219,131 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, "Password changed successfully", {}));
 });
 
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "User data fetched successfully", req.user));
+});
+
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { email, fullName } = req.body;
+  if (!email || !fullName) {
+    throw new ApiError(400, "Email and full name are required");
+  }
+  const updatedUSer = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        email,
+        fullName,
+      },
+    },
+    { new: true }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, "Account details updated successfully", updatedUSer)
+    );
+});
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path;
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar is required");
+  }
+  const avatar = await uploadFileToCloudinary(avatarLocalPath);
+
+  const user = User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: { avatar: avatar.url },
+    },
+    { new: true }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Avatar updated successfully", user));
+});
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { userName } = req.params;
+
+  if (!userName) {
+    throw new ApiError(400, "User name is required");
+  }
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        userName: userName?.toLowerCase(),
+      },
+    },
+    {
+      $lookup: {
+        from: "Subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "Subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    {
+      $addFields: {
+        subcribersCount: {
+          $size: "$subscribers",
+        },
+        subscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        isSubscribed: {
+          $cond: {
+            $if: { $in: [req.user._id, "$subscribers.subscriber"] },
+            $then: true,
+            $else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        userName: 1,
+        subcribersCount: 1,
+        subscribedToCount: 1,
+        isSubscribed: 1,
+        email: 1,
+        avatar: 1,
+        coverImage: 1,
+        fullName: 1,
+      },
+    },
+  ]);
+  if (!channel?.length) {
+    return res.status(404).json({ message: "Channel not found" });
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Channel fetched success", channel[0]));
+});
+
 export {
   registerUser,
   loginUSer,
   LogoutUser,
   RefreshAccessToken,
   changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
 };
